@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: authors
-          image: "username/authors:latest"
+          image: "upzs/aivle12-authors:latest"
           ports:
             - containerPort: 8080
           readinessProbe:
