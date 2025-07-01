@@ -1,67 +1,116 @@
-# authors
+# 
 
-## Running in local development environment
+## Model
+www.msaez.io/#/106015923/storming/9b47f316724021cfcdf69e251b42a323
 
+## Before Running Services
+### Make sure there is a Kafka server running
 ```
+cd kafka
+docker-compose up
+```
+- Check the Kafka messages:
+```
+cd infra
+docker-compose exec -it kafka /bin/bash
+cd /bin
+./kafka-console-consumer --bootstrap-server localhost:9092 --topic
+```
+
+## Run the backend micro-services
+See the README.md files inside the each microservices directory:
+
+- authors
+- manuscripts
+- aiservice
+- authentication
+- mybook
+- points
+- payments
+- books
+- notification
+
+
+## Run API Gateway (Spring Gateway)
+```
+cd gateway
 mvn spring-boot:run
 ```
 
-## Packaging and Running in docker environment
-
+## Test by API
+- authors
 ```
-mvn package -B -DskipTests
-docker build -t username/authors:v1 .
-docker run username/authors:v1
+ http :8088/authors id="id"userId="user_id"status="status"name="name"bio="bio"portfolioUrl="portfolio_url"
 ```
-
-## Push images and running in Kubernetes
-
+- manuscripts
 ```
-docker login 
-# in case of docker hub, enter your username and password
-
-docker push username/authors:v1
+ http :8088/manuscripts id="id"userId="user_id"title="title"content="content"status="status"
 ```
-
-Edit the deployment.yaml under the /kubernetes directory:
+- aiservice
 ```
-    spec:
-      containers:
-        - name: authors
-          image: username/authors:latest   # change this image name
-          ports:
-            - containerPort: 8080
-
+ http :8088/aiServices id="id"log="log"
 ```
-
-Apply the yaml to the Kubernetes:
+- authentication
 ```
-kubectl apply -f kubernetes/deployment.yaml
+ http :8088/users id="id"name="name"email="email"password="password"role="role"isSubscribed="is_subscribed"
 ```
-
-See the pod status:
+- mybook
 ```
-kubectl get pods -l app=authors
+ http :8088/myBooks id="id"userId="user_id"bookId="book_id"createdAt="created_at"
 ```
-
-If you have no problem, you can connect to the service by opening a proxy between your local and the kubernetes by using this command:
+- points
 ```
-# new terminal
-kubectl port-forward deploy/authors 8080:8080
-
-# another terminal
-http localhost:8080
+ http :8088/points id="id"userId="user_id"point="point"totalPoint="total_point"createdAt="created_at"
+```
+- payments
+```
+ http :8088/payments id="id"userId="user_id"item="item"amount="amount"status="status"createdAt="created_at"
+```
+- books
+```
+ http :8088/books id="id"authorId="author_id"authorName="author_name"title="title"category="category"content="content"summary="summary"audioUrl="audio_url"imageUrl="image_url"todayCount="today_count"totalCount="total_count"createdAt="created_at"
+```
+- notification
+```
+ http :8088/알림 id="id"email="email"message="message"isRead="is_read"createdAt="created_at"
 ```
 
-If you have any problem on running the pod, you can find the reason by hitting this:
+
+## Run the frontend
 ```
-kubectl logs -l app=authors
+cd frontend
+npm i
+npm run serve
 ```
 
-Following problems may be occurred:
+## Test by UI
+Open a browser to localhost:8088
 
-1. ImgPullBackOff:  Kubernetes failed to pull the image with the image name you've specified at the deployment.yaml. Please check your image name and ensure you have pushed the image properly.
-1. CrashLoopBackOff: The spring application is not running properly. If you didn't provide the kafka installation on the kubernetes, the application may crash. Please install kafka firstly:
+## Required Utilities
 
-https://labs.msaez.io/#/courses/cna-full/full-course-cna/ops-utility
+- httpie (alternative for curl / POSTMAN) and network utils
+```
+sudo apt-get update
+sudo apt-get install net-tools
+sudo apt install iputils-ping
+pip install httpie
+```
 
+- kubernetes utilities (kubectl)
+```
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+```
+
+- aws cli (aws)
+```
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+```
+
+- eksctl 
+```
+curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+sudo mv /tmp/eksctl /usr/local/bin
+```
