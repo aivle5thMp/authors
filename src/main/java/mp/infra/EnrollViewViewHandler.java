@@ -28,7 +28,6 @@ public class EnrollViewViewHandler {
             EnrollView enrollView = new EnrollView();
             // view 객체에 이벤트의 Value 를 set 함
             enrollView.setUserId(authorApplied.getUserId());
-            enrollView.setInfo(authorApplied.getInfo());
             enrollView.setPortfolioUrl(authorApplied.getPortfolioUrl());
             enrollView.setStatus(authorApplied.getStatus());
             // view 레파지 토리에 save

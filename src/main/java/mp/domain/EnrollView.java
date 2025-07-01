@@ -23,7 +23,6 @@ public class EnrollView {
     @Column(columnDefinition = "BINARY(16)")
     private UUID userId;
     private String enrollStatus;
-    private String info;
     private String portfolioUrl;
     private String status;
 }

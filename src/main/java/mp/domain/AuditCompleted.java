@@ -13,7 +13,6 @@ public class AuditCompleted extends AbstractEvent {
 
     private UUID id;
     private UUID userId;
-    private String info;
     private String status;
     private String portfolioUrl;
 
