@@ -4,18 +4,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Map;
 import java.util.UUID;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.transaction.Transactional;
 import mp.domain.*;
-import mp.security.JwtVerifier;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import lombok.RequiredArgsConstructor;    // ← 추가
+import lombok.RequiredArgsConstructor;
 
 //<<< Clean Arch / Inbound Adaptor
 
@@ -24,15 +20,16 @@ import lombok.RequiredArgsConstructor;    // ← 추가
 @RequiredArgsConstructor
 public class AuthorController {
 
-    private static final Logger logger = LoggerFactory.getLogger(AuthorController.class);
-
-    @Autowired
-    private AuthorService authorService;
-    private final JwtVerifier jwtVerifier;
+    private final AuthorService authorService;
 
     @PostMapping("/apply")
+    @PreAuthorize("hasRole('USER') or hasRole('AUTHOR') or hasRole('ADMIN')")
     public ResponseEntity<SimpleResponse> applyAuthor(@RequestBody Author author) {
         try {
+            // Spring Security에서 현재 인증된 사용자 ID 가져오기
+            UUID userId = getCurrentUserId();
+            author.setUserId(userId);
+            
             authorService.applyAuthor(author);
             return ResponseEntity.ok(new SimpleResponse(true));
         } catch (Exception e) {
@@ -42,83 +39,111 @@ public class AuthorController {
     }
 
     @GetMapping("/list")
-    public ResponseEntity<ApiResponse<List<Author>>> listAuthors(@RequestHeader("Authorization") String authHeader) {
-        logger.info("작가 목록 조회 요청 시작");
-        
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<Author>>> listAuthors() {
         try {
-            // JWT 검증 및 ADMIN 역할 확인
-            String token = authHeader.replace("Bearer ", "");
-            logger.info("JWT 토큰 추출 완료");
-            
-            Map<String, Object> userInfo = jwtVerifier.verifyAndExtract(token);
-            logger.info("JWT 검증 완료 - 사용자: {}, 역할: {}", userInfo.get("name"), userInfo.get("role"));
-            
-            String role = (String) userInfo.get("role");
-            if (!"ADMIN".equals(role)) {
-                logger.warn("ADMIN 권한 없음 - 사용자: {}, 역할: {}", userInfo.get("name"), role);
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(new ApiResponse<>(false, "ADMIN 권한이 필요합니다.", null));
-            }
-            
-            logger.info("ADMIN 권한 확인 완료 - 작가 목록 조회 진행");
-            List<Author> authors = authorService.getAllAuthors();
-            logger.info("작가 목록 조회 완료 - 총 {}명", authors.size());
+            List<Author> authors = authorService.getPendingAuthors();
             
             return ResponseEntity.ok(
-                new ApiResponse<>(true, "작가 목록을 성공적으로 조회했습니다.", authors)
+                new ApiResponse<>(true, "대기 중인 작가 목록을 성공적으로 조회했습니다.", authors)
             );
         } catch (Exception e) {
-            logger.error("작가 목록 조회 중 오류 발생: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ApiResponse<>(false, "작가 목록 조회 중 오류가 발생했습니다: " + e.getMessage(), null));
         }
     }
 
     @PatchMapping("/review")
-    public ResponseEntity<SimpleResponse> reviewAuthor(@RequestBody ReviewRequest reviewRequest, @RequestHeader("Authorization") String authHeader) {
-        logger.info("작가 심사 요청 시작 - 작가ID: {}, 승인여부: {}", reviewRequest.getAuthorId(), reviewRequest.getStatus());
-        
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SimpleResponse> reviewAuthor(@RequestBody ReviewRequest reviewRequest) {
         try {
-            // JWT 검증 및 ADMIN 역할 확인
-            String token = authHeader.replace("Bearer ", "");
-            logger.info("JWT 토큰 추출 완료");
-            
-            Map<String, Object> userInfo = jwtVerifier.verifyAndExtract(token);
-            logger.info("JWT 검증 완료 - 사용자: {}, 역할: {}", userInfo.get("name"), userInfo.get("role"));
-            
-            String role = (String) userInfo.get("role");
-            if (!"ADMIN".equals(role)) {
-                logger.warn("ADMIN 권한 없음 - 사용자: {}, 역할: {}", userInfo.get("name"), role);
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(new SimpleResponse(false));
-            }
-            
-            logger.info("ADMIN 권한 확인 완료 - 작가 심사 진행");
             Optional<Author> authorOpt = authorService.reviewAuthor(
                 reviewRequest.getAuthorId(), 
                 reviewRequest.getStatus()
             );
             
             if (authorOpt.isPresent()) {
-                logger.info("작가 심사 완료 - 작가ID: {}, 결과: {}", reviewRequest.getAuthorId(), reviewRequest.getStatus());
                 return ResponseEntity.ok(new SimpleResponse(true));
             } else {
-                logger.warn("작가를 찾을 수 없음 - 작가ID: {}", reviewRequest.getAuthorId());
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new SimpleResponse(false));
             }
         } catch (Exception e) {
-            logger.error("작가 심사 중 오류 발생: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new SimpleResponse(false));
         }
     }
 
-    @GetMapping("/user")
-    public Map<String, Object> getUser(@RequestHeader("Authorization") String authHeader) {
-        String token = authHeader.replace("Bearer ", "");
-        return jwtVerifier.verifyAndExtract(token);
+    @GetMapping("/status")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Author>> getMyApplicationStatus() {
+        try {
+            UUID userId = getCurrentUserId();
+            Optional<Author> authorOpt = authorService.getAuthorByUserId(userId);
+            
+            if (authorOpt.isPresent()) {
+                return ResponseEntity.ok(
+                    new ApiResponse<>(true, "작가 신청 상태를 성공적으로 조회했습니다.", authorOpt.get())
+                );
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse<>(false, "작가 신청 내역을 찾을 수 없습니다.", null));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiResponse<>(false, "작가 신청 상태 조회 중 오류가 발생했습니다: " + e.getMessage(), null));
+        }
     }
+
+    @GetMapping("/user")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Object>> getUser() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            UUID userId = (UUID) auth.getPrincipal();
+            String role = auth.getAuthorities().iterator().next().getAuthority().replace("ROLE_", "");
+            
+            Map<String, Object> userInfo = Map.of(
+                "user_id", userId.toString(),
+                "role", role
+            );
+            
+            return ResponseEntity.ok(userInfo);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "사용자 정보 조회 중 오류가 발생했습니다."));
+        }
+    }
+
+    @GetMapping("/{authorId}/userId")
+    public ResponseEntity<ApiResponse<UserIdResponse>> getUserIdByAuthorId(@PathVariable UUID authorId) {
+        try {
+            Optional<Author> authorOpt = authorService.getAuthorById(authorId);
+            
+            if (authorOpt.isPresent()) {
+                Author author = authorOpt.get();
+                UserIdResponse response = new UserIdResponse(author.getUserId());
+                return ResponseEntity.ok(
+                    new ApiResponse<>(true, "작가의 사용자 ID를 성공적으로 조회했습니다.", response)
+                );
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse<>(false, "해당 작가를 찾을 수 없습니다.", null));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiResponse<>(false, "작가 사용자 ID 조회 중 오류가 발생했습니다: " + e.getMessage(), null));
+        }
+    }
+
+    /**
+     * Spring Security에서 현재 인증된 사용자 ID 가져오기
+     */
+    private UUID getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return (UUID) authentication.getPrincipal();
+    }
+    
     // DTO Classes
     public static class ReviewRequest {
         private UUID authorId;
@@ -160,6 +185,19 @@ public class AuthorController {
         public void setMessage(String message) { this.message = message; }
         public T getData() { return data; }
         public void setData(T data) { this.data = data; }
+    }
+
+    public static class UserIdResponse {
+        private UUID userId;
+
+        public UserIdResponse() {}
+
+        public UserIdResponse(UUID userId) {
+            this.userId = userId;
+        }
+
+        public UUID getUserId() { return userId; }
+        public void setUserId(UUID userId) { this.userId = userId; }
     }
 }
 //>>> Clean Arch / Inbound Adaptor

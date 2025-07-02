@@ -18,14 +18,9 @@ public class AuthorService {
      * 작가 신청 처리
      */
     public Author applyAuthor(Author author) {
-        // Set userId if not provided (for testing purposes)
-        if (author.getUserId() == null) {
-            author.setUserId(UUID.randomUUID());
-        }
-        
-        // Set initial status to false (pending approval)
+        // Set initial status to pending if not provided
         if (author.getStatus() == null) {
-            author.setStatus("false");
+            author.setStatus(AuthorStatus.PENDING);
         }
         
         return authorRepository.save(author);
@@ -39,6 +34,13 @@ public class AuthorService {
     }
 
     /**
+     * PENDING 상태인 작가 신청 목록 조회 (관리자용)
+     */
+    public List<Author> getPendingAuthors() {
+        return authorRepository.findByStatus(AuthorStatus.PENDING);
+    }
+
+    /**
      * 작가 심사 처리 (관리자용)
      */
     public Optional<Author> reviewAuthor(UUID authorId, Boolean approved) {
@@ -46,7 +48,7 @@ public class AuthorService {
         
         if (authorOpt.isPresent()) {
             Author author = authorOpt.get();
-            author.setStatus(approved ? "true" : "false");
+            author.setStatus(approved ? AuthorStatus.APPROVED : AuthorStatus.REJECTED);
             Author updatedAuthor = authorRepository.save(author);
             return Optional.of(updatedAuthor);
         }
@@ -59,5 +61,12 @@ public class AuthorService {
      */
     public Optional<Author> getAuthorById(UUID authorId) {
         return authorRepository.findById(authorId);
+    }
+
+    /**
+     * 사용자 ID로 작가 신청 조회
+     */
+    public Optional<Author> getAuthorByUserId(UUID userId) {
+        return authorRepository.findByUserId(userId);
     }
 } 

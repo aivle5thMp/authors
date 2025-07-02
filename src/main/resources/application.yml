@@ -15,10 +15,18 @@ spring:
     driver-class-name: org.h2.Driver
     username: sa
     password: 
+
+# JWT 설정
+jwt:
+  secret: ${JWT_SECRET:your-super-secret-jwt-key-for-production-use-this-should-be-very-long-and-random}
+  expiration: ${JWT_EXPIRATION:86400000}
+
 ---
 
 spring:
-  profiles: default
+  config:
+    activate:
+      on-profile: default
   jpa:
     properties:
       hibernate:
@@ -39,16 +47,9 @@ spring:
                 value:
                   serde: org.apache.kafka.common.serialization.Serdes$StringSerde
       bindings:
-        event-in:
-          group: authors
-#<<< EDA / Topic Name
-          destination: mp
-#>>> EDA / Topic Name
-          contentType: application/json
-        event-out:
-#<<< EDA / Topic Name
-          destination: mp
-#>>> EDA / Topic Name
+        # 발행할 토픽 (Producer)
+        author-review-out:
+          destination: author.review.v1
           contentType: application/json
 
 logging:
@@ -63,7 +64,9 @@ server:
 ---
 
 spring:
-  profiles: docker
+  config:
+    activate:
+      on-profile: docker
   h2:
     console:
       enabled: true
@@ -94,15 +97,10 @@ spring:
                   serde: org.apache.kafka.common.serialization.Serdes$StringSerde
                 value:
                   serde: org.apache.kafka.common.serialization.Serdes$StringSerde
-      bindings:
-        event-in:
-          group: authors
-          destination: mp
-          contentType: application/json
-        event-out:
-          destination: mp
-          contentType: application/json
 
-jwt:
-  secret: ${JWT_SECRET:defaultTestSecretKeyForDevelopmentOnly123456789}
-  expiration: ${JWT_EXPIRATION:86400000}
+      bindings:
+        # 발행할 토픽 (Producer)
+        author-review-out:
+          group: authors
+          destination: author.review.v1
+          contentType: application/json

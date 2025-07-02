@@ -35,7 +35,7 @@ public class AbstractEvent {
         KafkaProcessor processor = AuthorsApplication.applicationContext.getBean(
             KafkaProcessor.class
         );
-        MessageChannel outputChannel = processor.outboundTopic();
+        MessageChannel outputChannel = processor.authorReviewOut();
 
         outputChannel.send(
             MessageBuilder

@@ -1,9 +1,7 @@
 package mp.domain;
-//
-import java.time.LocalDate;
+
 import java.util.*;
 import lombok.*;
-import mp.domain.*;
 import mp.infra.AbstractEvent;
 
 //<<< DDD / Domain Event
@@ -18,6 +16,9 @@ public class AuditCompleted extends AbstractEvent {
 
     public AuditCompleted(Author aggregate) {
         super(aggregate);
+        if (aggregate.getStatus() != null) {
+            this.status = aggregate.getStatus().getValue();
+        }
     }
 
     public AuditCompleted() {
