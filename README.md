@@ -30,7 +30,7 @@ Edit the deployment.yaml under the /kubernetes directory:
         - name: authors
           image: username/authors:latest   # change this image name
           ports:
-            - containerPort: 8080
+            - containerPort: 8081
 
 ```
 
@@ -47,10 +47,10 @@ kubectl get pods -l app=authors
 If you have no problem, you can connect to the service by opening a proxy between your local and the kubernetes by using this command:
 ```
 # new terminal
-kubectl port-forward deploy/authors 8080:8080
+kubectl port-forward deploy/authors 8081:8081
 
 # another terminal
-http localhost:8080
+http localhost:8081
 ```
 
 If you have any problem on running the pod, you can find the reason by hitting this:
