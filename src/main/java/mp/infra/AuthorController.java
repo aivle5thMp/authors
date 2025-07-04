@@ -4,12 +4,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Map;
 import java.util.UUID;
+import javax.servlet.http.HttpServletRequest;
 import mp.domain.*;
+import mp.util.UserHeaderUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 
@@ -23,13 +22,22 @@ public class AuthorController {
     private final AuthorService authorService;
 
     @PostMapping("/apply")
-    @PreAuthorize("hasRole('USER') or hasRole('AUTHOR') or hasRole('ADMIN')")
-    public ResponseEntity<SimpleResponse> applyAuthor(@RequestBody Author author) {
+    public ResponseEntity<SimpleResponse> applyAuthor(@RequestBody Author author, HttpServletRequest request) {
         try {
-            // Spring Security에서 현재 인증된 사용자 ID 가져오기
-            UUID userId = getCurrentUserId();
-            author.setUserId(userId);
+            // 권한 체크 (USER, AUTHOR, ADMIN 중 하나 필요)
+            if (!UserHeaderUtil.hasAnyRole(request, "USER", "AUTHOR", "ADMIN")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new SimpleResponse(false));
+            }
             
+            // Gateway에서 전달한 사용자 ID 가져오기
+            UUID userId = UserHeaderUtil.getUserId(request);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new SimpleResponse(false));
+            }
+            
+            author.setUserId(userId);
             authorService.applyAuthor(author);
             return ResponseEntity.ok(new SimpleResponse(true));
         } catch (Exception e) {
@@ -39,9 +47,14 @@ public class AuthorController {
     }
 
     @GetMapping("/list")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<List<Author>>> listAuthors() {
+    public ResponseEntity<ApiResponse<List<Author>>> listAuthors(HttpServletRequest request) {
         try {
+            // 관리자 권한 체크
+            if (!UserHeaderUtil.isAdmin(request)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse<>(false, "관리자 권한이 필요합니다.", null));
+            }
+            
             List<Author> authors = authorService.getPendingAuthors();
             
             return ResponseEntity.ok(
@@ -54,9 +67,14 @@ public class AuthorController {
     }
 
     @PatchMapping("/review")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<SimpleResponse> reviewAuthor(@RequestBody ReviewRequest reviewRequest) {
+    public ResponseEntity<SimpleResponse> reviewAuthor(@RequestBody ReviewRequest reviewRequest, HttpServletRequest request) {
         try {
+            // 관리자 권한 체크
+            if (!UserHeaderUtil.isAdmin(request)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new SimpleResponse(false));
+            }
+            
             Optional<Author> authorOpt = authorService.reviewAuthor(
                 reviewRequest.getAuthorId(), 
                 reviewRequest.getStatus()
@@ -75,33 +93,56 @@ public class AuthorController {
     }
 
     @GetMapping("/status")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<Author>> getMyApplicationStatus() {
+    public ResponseEntity<ApiResponse<Author>> getMyApplicationStatus(HttpServletRequest request) {
+        System.out.println("=== AuthorController.getMyApplicationStatus() ===");
+        System.out.println("Request URI: " + request.getRequestURI());
+        System.out.println("Request Method: " + request.getMethod());
+        
         try {
-            UUID userId = getCurrentUserId();
+            System.out.println("Checking authentication...");
+            
+            // 인증 확인
+            if (!UserHeaderUtil.isAuthenticated(request)) {
+                System.out.println("Authentication failed - returning 401");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse<>(false, "인증이 필요합니다.", null));
+            }
+            
+            System.out.println("Authentication successful - getting user info...");
+            UUID userId = UserHeaderUtil.getUserId(request);
+            System.out.println("Looking up author for user ID: " + userId);
+            
             Optional<Author> authorOpt = authorService.getAuthorByUserId(userId);
             
             if (authorOpt.isPresent()) {
+                System.out.println("Author found - returning success response");
                 return ResponseEntity.ok(
                     new ApiResponse<>(true, "작가 신청 상태를 성공적으로 조회했습니다.", authorOpt.get())
                 );
             } else {
+                System.out.println("Author not found for user ID: " + userId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ApiResponse<>(false, "작가 신청 내역을 찾을 수 없습니다.", null));
             }
         } catch (Exception e) {
+            System.err.println("Error in getMyApplicationStatus: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ApiResponse<>(false, "작가 신청 상태 조회 중 오류가 발생했습니다: " + e.getMessage(), null));
         }
     }
 
     @GetMapping("/user")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, Object>> getUser() {
+    public ResponseEntity<Map<String, Object>> getUser(HttpServletRequest request) {
         try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            UUID userId = (UUID) auth.getPrincipal();
-            String role = auth.getAuthorities().iterator().next().getAuthority().replace("ROLE_", "");
+            // 인증 확인
+            if (!UserHeaderUtil.isAuthenticated(request)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "인증이 필요합니다."));
+            }
+            
+            UUID userId = UserHeaderUtil.getUserId(request);
+            String role = UserHeaderUtil.getUserRole(request);
             
             Map<String, Object> userInfo = Map.of(
                 "user_id", userId.toString(),
@@ -136,13 +177,7 @@ public class AuthorController {
         }
     }
 
-    /**
-     * Spring Security에서 현재 인증된 사용자 ID 가져오기
-     */
-    private UUID getCurrentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return (UUID) authentication.getPrincipal();
-    }
+    // Gateway에서 전달한 헤더 정보로 사용자 정보를 가져오므로 getCurrentUserId() 메서드 제거
     
     // DTO Classes
     public static class ReviewRequest {
